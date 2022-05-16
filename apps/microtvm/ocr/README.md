@@ -92,4 +92,9 @@ python3 ./convert_image.py path/to/image
 
 Model description
 -----------------
-In this example, since the Arm(R) Cortex(R)-M55 CPU does not support the rnn operator, the corresponding operator is deleted based on the [PP-OCRv3](https://github.com/PaddlePaddle/PaddleOCR/blob/release%2F2.5/doc/doc_ch/PP-OCRv3_introduction.md) text recognition model to obtain the current model.
+In this demo, the model we use is an English recognition model based on [PP-OCRv3](https://github.com/PaddlePaddle/PaddleOCR/blob/dygraph/doc/doc_ch/PP-OCRv3_introduction.md). PP-OCRv3 is the third version of the PP-OCR series model released by [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR). This series of models has the following features:
+  - PP-OCRv3: ultra-lightweight OCR system: detection (3.6M) + direction classifier (1.4M) + recognition (12M) = 17.0M
+  - Support more than 80 kinds of multi-language recognition models, including English, Chinese, French, German, Arabic, Korean, Japanese and so on. For details
+  - Support vertical text recognition, and long text recognition
+
+The text recognition model in PP-OCRv3 supports more than 80 languages. In the process of model development, since Arm(R) Cortex(R)-M55 CPU does not support rnn operator, we delete the unsupported operator based on the PP-OCRv3 text recognition model to obtain the current model.
