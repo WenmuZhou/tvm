@@ -1,0 +1,2 @@
+/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ar qc libCMSISNNBasicMaths.a CMakeFiles/CMSISNNBasicMaths.dir/arm_elementwise_add_s8.c.obj CMakeFiles/CMSISNNBasicMaths.dir/arm_elementwise_mul_s8.c.obj
+/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ranlib libCMSISNNBasicMaths.a

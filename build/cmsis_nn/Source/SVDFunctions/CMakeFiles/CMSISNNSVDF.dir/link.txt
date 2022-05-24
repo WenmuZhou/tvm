@@ -1,0 +1,2 @@
+/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ar qc libCMSISNNSVDF.a CMakeFiles/CMSISNNSVDF.dir/arm_svdf_s8.c.obj
+/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ranlib libCMSISNNSVDF.a

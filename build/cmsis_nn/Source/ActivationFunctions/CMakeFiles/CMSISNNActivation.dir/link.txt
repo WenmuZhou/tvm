@@ -1,0 +1,2 @@
+/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ar qc libCMSISNNActivation.a CMakeFiles/CMSISNNActivation.dir/arm_relu6_s8.c.obj
+/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ranlib libCMSISNNActivation.a

@@ -1,0 +1,2 @@
+/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ar qc libCMSISNNPooling.a CMakeFiles/CMSISNNPooling.dir/arm_avgpool_s8.c.obj CMakeFiles/CMSISNNPooling.dir/arm_max_pool_s8.c.obj
+/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ranlib libCMSISNNPooling.a

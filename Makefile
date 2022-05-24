@@ -15,166 +15,100 @@
 # specific language governing permissions and limitations
 # under the License.
 
+# Makefile to build demo
 
-.PHONY: all \
-        runtime vta cpptest crttest \
-        lint pylint cpplint scalalint \
-	cppdoc docs \
-	web webclean \
-	cython cython3 cyclean \
-        clean
+# Setup build environment
+BUILD_DIR := build
 
-.SECONDEXPANSION:
+ARM_CPU = ARMCM55
+ETHOSU_PATH = /opt/arm/ethosu
+CMSIS_PATH ?= ${ETHOSU_PATH}/cmsis
+ETHOSU_PLATFORM_PATH ?= ${ETHOSU_PATH}/core_platform
+STANDALONE_CRT_PATH := $(abspath $(BUILD_DIR))/runtime
+CORSTONE_300_PATH = ${ETHOSU_PLATFORM_PATH}/targets/corstone-300
+PKG_COMPILE_OPTS = -g -Wall -O2 -Wno-incompatible-pointer-types -Wno-format -mcpu=cortex-m55 -mthumb -mfloat-abi=hard -std=gnu99
+CMAKE ?= cmake
+CC = arm-none-eabi-gcc
+AR = arm-none-eabi-ar
+RANLIB = arm-none-eabi-ranlib
+PKG_CFLAGS = ${PKG_COMPILE_OPTS} \
+	-I${STANDALONE_CRT_PATH}/include \
+	-I${STANDALONE_CRT_PATH}/src/runtime/crt/include \
+	-I${PWD}/include \
+	-I${CORSTONE_300_PATH} \
+	-I${CMSIS_PATH}/Device/ARM/${ARM_CPU}/Include/ \
+	-I${CMSIS_PATH}/CMSIS/Core/Include \
+	-I${CMSIS_PATH}/CMSIS/NN/Include \
+	-I${CMSIS_PATH}/CMSIS/DSP/Include \
+	-I$(abspath $(BUILD_DIR))/codegen/host/include
+CMSIS_NN_CMAKE_FLAGS = -DCMAKE_TOOLCHAIN_FILE=$(abspath $(BUILD_DIR))/../arm-none-eabi-gcc.cmake \
+	-DTARGET_CPU=cortex-m55 \
+	-DBUILD_CMSIS_NN_FUNCTIONS=YES
+PKG_LDFLAGS = -lm -specs=nosys.specs -static -T corstone300.ld
 
-# Remember the root directory, to be usable by submake invocation.
-ROOTDIR = $(CURDIR)
+$(ifeq VERBOSE,1)
+QUIET ?=
+$(else)
+QUIET ?= @
+$(endif)
 
-# Specify an alternate output directory relative to ROOTDIR.  Defaults
-# to "build".  Can also be a space-separated list of build
-# directories, each with a different configuation.
-TVM_BUILD_PATH ?= build
-TVM_BUILD_PATH := $(abspath $(TVM_BUILD_PATH))
+DEMO_MAIN = src/demo_bare_metal.c
+CODEGEN_SRCS = $(wildcard $(abspath $(BUILD_DIR))/codegen/host/src/*.c)
+CODEGEN_OBJS = $(subst .c,.o,$(CODEGEN_SRCS))
+CMSIS_STARTUP_SRCS = $(wildcard ${CMSIS_PATH}/Device/ARM/${ARM_CPU}/Source/*.c)
+UART_SRCS = $(wildcard ${CORSTONE_300_PATH}/*.c)
 
-# Allow environment variables for 3rd-party libraries, default to
-# packaged version.
-DMLC_CORE_PATH ?= $(ROOTDIR)/3rdparty/dmlc-core
-DLPACK_PATH ?= $(ROOTDIR)/3rdparty/dlpack
-VTA_HW_PATH ?= $(ROOTDIR)/3rdparty/vta-hw
+demo: $(BUILD_DIR)/demo
 
+$(BUILD_DIR)/stack_allocator.o: $(STANDALONE_CRT_PATH)/src/runtime/crt/memory/stack_allocator.c
+	$(QUIET)mkdir -p $(@D)
+	$(QUIET)$(CC) -c $(PKG_CFLAGS) -o $@  $^
 
+$(BUILD_DIR)/crt_backend_api.o: $(STANDALONE_CRT_PATH)/src/runtime/crt/common/crt_backend_api.c
+	$(QUIET)mkdir -p $(@D)
+	$(QUIET)$(CC) -c $(PKG_CFLAGS) -o $@  $^
 
+# Build generated code
+$(BUILD_DIR)/libcodegen.a: $(CODEGEN_SRCS)
+	$(QUIET)cd $(abspath $(BUILD_DIR)/codegen/host/src) && $(CC) -c $(PKG_CFLAGS) $(CODEGEN_SRCS)
+	$(QUIET)$(AR) -cr $(abspath $(BUILD_DIR)/libcodegen.a) $(CODEGEN_OBJS)
+	$(QUIET)$(RANLIB) $(abspath $(BUILD_DIR)/libcodegen.a)
 
-all: $(addsuffix /all,$(TVM_BUILD_PATH))
+# Build CMSIS startup code
+${BUILD_DIR}/libcmsis_startup.a: $(CMSIS_STARTUP_SRCS)
+	$(QUIET)mkdir -p $(abspath $(BUILD_DIR)/libcmsis_startup)
+	$(QUIET)cd $(abspath $(BUILD_DIR)/libcmsis_startup) && $(CC) -c $(PKG_CFLAGS) -D${ARM_CPU} $^
+	$(QUIET)$(AR) -cr $(abspath $(BUILD_DIR)/libcmsis_startup.a) $(abspath $(BUILD_DIR))/libcmsis_startup/*.o
+	$(QUIET)$(RANLIB) $(abspath $(BUILD_DIR)/libcmsis_startup.a)
 
-runtime: $(addsuffix /runtime,$(TVM_BUILD_PATH))
-vta: $(addsuffix /vta,$(TVM_BUILD_PATH))
-cpptest: $(addsuffix /cpptest,$(TVM_BUILD_PATH))
-crttest: $(addsuffix /crttest,$(TVM_BUILD_PATH))
+# Build CMSIS-NN
+${BUILD_DIR}/cmsis_nn/Source/SoftmaxFunctions/libCMSISNNSoftmax.a:
+	$(QUIET)mkdir -p $(@D)
+	$(QUIET)cd $(CMSIS_PATH)/CMSIS/NN && $(CMAKE) -B $(abspath $(BUILD_DIR)/cmsis_nn) $(CMSIS_NN_CMAKE_FLAGS)
+	$(QUIET)cd $(abspath $(BUILD_DIR)/cmsis_nn) && $(MAKE) all	
 
-# If there is a config.cmake in the tvm directory, preferentially use
-# it.  Otherwise, copy the default cmake/config.cmake.
-ifeq ($(wildcard config.cmake),config.cmake)
-%/config.cmake: | config.cmake
-	@echo "No config.cmake found in $(TVM_BUILD_PATH), using config.cmake in root tvm directory"
-	@mkdir -p $(@D)
-else
-# filter-out used to avoid circular dependency
-%/config.cmake: | $$(filter-out %/config.cmake,$(ROOTDIR)/cmake/config.cmake)
-	@echo "No config.cmake found in $(TVM_BUILD_PATH), using default config.cmake"
-	@mkdir -p $(@D)
-	@cp $| $@
-endif
+# Build demo application
+$(BUILD_DIR)/demo: $(DEMO_MAIN) $(UART_SRCS) $(BUILD_DIR)/stack_allocator.o $(BUILD_DIR)/crt_backend_api.o \
+       ${BUILD_DIR}/libcodegen.a ${BUILD_DIR}/libcmsis_startup.a \
+       ${BUILD_DIR}/cmsis_nn/Source/SoftmaxFunctions/libCMSISNNSoftmax.a \
+       ${BUILD_DIR}/cmsis_nn/Source/FullyConnectedFunctions/libCMSISNNFullyConnected.a \
+       ${BUILD_DIR}/cmsis_nn/Source/SVDFunctions/libCMSISNNSVDF.a \
+       ${BUILD_DIR}/cmsis_nn/Source/ReshapeFunctions/libCMSISNNReshape.a \
+       ${BUILD_DIR}/cmsis_nn/Source/ActivationFunctions/libCMSISNNActivation.a \
+       ${BUILD_DIR}/cmsis_nn/Source/NNSupportFunctions/libCMSISNNSupport.a \
+       ${BUILD_DIR}/cmsis_nn/Source/ConcatenationFunctions/libCMSISNNConcatenation.a \
+       ${BUILD_DIR}/cmsis_nn/Source/BasicMathFunctions/libCMSISNNBasicMaths.a \
+       ${BUILD_DIR}/cmsis_nn/Source/ConvolutionFunctions/libCMSISNNConvolutions.a \
+       ${BUILD_DIR}/cmsis_nn/Source/PoolingFunctions/libCMSISNNPooling.a
+	$(QUIET)mkdir -p $(@D)
+	$(QUIET)$(CC) $(PKG_CFLAGS) $(FREERTOS_FLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive $(PKG_LDFLAGS)
 
+clean:
+	$(QUIET)rm -rf $(BUILD_DIR)/codegen
 
-# Cannot use .PHONY with a pattern rule, using FORCE instead.  For
-# now, force cmake to be re-run with each compile to mimic previous
-# behavior.  This may be relaxed in the future with the
-# CONFIGURE_DEPENDS option for GLOB (requres cmake >= 3.12).
-FORCE:
-%/CMakeCache.txt: %/config.cmake FORCE
-	@cd $(@D) && cmake $(ROOTDIR)
+cleanall:
+	$(QUIET)rm -rf $(BUILD_DIR)
 
+.SUFFIXES:
 
-# Since the pattern stem is already being used for the directory name,
-# cannot also have it refer to the command passed to cmake.
-# Therefore, explicitly listing out the delegated.
-CMAKE_TARGETS = all runtime vta cpptest crttest clean
-
-define GEN_CMAKE_RULE
-%/$(CMAKE_TARGET): %/CMakeCache.txt FORCE
-	@$$(MAKE) -C $$(@D) $(CMAKE_TARGET)
-endef
-$(foreach CMAKE_TARGET,$(CMAKE_TARGETS),$(eval $(GEN_CMAKE_RULE)))
-
-
-
-# Dev tools for formatting, linting, and documenting.  NOTE: lint
-# scripts that are executed in the CI should be in tests/lint. This
-# allows docker/lint.sh to behave similarly to the CI.
-format:
-	./tests/lint/git-clang-format.sh -i --rev origin/main
-	black .
-	cd rust && which cargo && cargo fmt --all
-
-lint: cpplint pylint jnilint
-
-cpplint:
-	tests/lint/cpplint.sh
-
-pylint:
-	tests/lint/pylint.sh
-
-jnilint:
-	python3 3rdparty/dmlc-core/scripts/lint.py tvm4j-jni cpp jvm/native/src
-
-scalalint:
-	make -C $(VTA_HW_PATH)/hardware/chisel lint
-
-
-mypy:
-	tests/scripts/task_mypy.sh
-
-cppdoc:
-	doxygen docs/Doxyfile
-
-
-# Cython build
-cython cython3:
-	cd python; python3 setup.py build_ext --inplace
-
-cyclean:
-	rm -rf python/tvm/*/*/*.so python/tvm/*/*/*.dylib python/tvm/*/*/*.cpp
-
-
-
-# EMCC; Web related scripts
-web:
-	$(MAKE) -C $(ROOTDIR)/web
-
-webclean:
-	$(MAKE) -C $(ROOTDIR)/web clean
-
-
-# JVM build rules
-INCLUDE_FLAGS = -Iinclude -I$(DLPACK_PATH)/include -I$(DMLC_CORE_PATH)/include
-PKG_CFLAGS = -std=c++11 -Wall -O2 $(INCLUDE_FLAGS) -fPIC
-PKG_LDFLAGS =
-
-ifeq ($(OS),Windows_NT)
-  JVM_PKG_PROFILE := windows
-  SHARED_LIBRARY_SUFFIX := dll
-else
-  UNAME_S := $(shell uname -s)
-  ifeq ($(UNAME_S), Darwin)
-    JVM_PKG_PROFILE := osx-x86_64
-    SHARED_LIBRARY_SUFFIX := dylib
-  else
-    JVM_PKG_PROFILE := linux-x86_64
-    SHARED_LIBRARY_SUFFIX := so
-  endif
-endif
-
-JVM_TEST_ARGS ?= -DskipTests -Dcheckstyle.skip=true
-
-# Built java docs are in jvm/core/target/site/apidocs
-javadoc:
-	(cd $(ROOTDIR)/jvm; \
-		mvn "javadoc:javadoc" -Dnotimestamp=true)
-
-jvmpkg:
-	(cd $(ROOTDIR)/jvm; \
-		mvn clean package -P$(JVM_PKG_PROFILE) -Dcxx="$(CXX)" \
-			-Dcflags="$(PKG_CFLAGS)" -Dldflags="$(PKG_LDFLAGS)" \
-			-Dcurrent_libdir="$(TVM_BUILD_PATH)" $(JVM_TEST_ARGS))
-
-jvminstall:
-	(cd $(ROOTDIR)/jvm; \
-		mvn install -P$(JVM_PKG_PROFILE) -Dcxx="$(CXX)" \
-			-Dcflags="$(PKG_CFLAGS)" -Dldflags="$(PKG_LDFLAGS)" \
-			-Dcurrent_libdir="$(TVM_BUILD_PATH)" $(JVM_TEST_ARGS))
-
-# Final cleanup rules, delegate to more specific rules.
-clean: $(addsuffix /clean,$(TVM_BUILD_PATH)) cyclean webclean
-
-docs:
-	python3 tests/scripts/ci.py docs
+.DEFAULT: demo
