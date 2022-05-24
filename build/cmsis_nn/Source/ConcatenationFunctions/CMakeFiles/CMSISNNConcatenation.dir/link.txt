@@ -1,2 +1,0 @@
-/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ar qc libCMSISNNConcatenation.a CMakeFiles/CMSISNNConcatenation.dir/arm_concatenation_s8_w.c.obj CMakeFiles/CMSISNNConcatenation.dir/arm_concatenation_s8_x.c.obj CMakeFiles/CMSISNNConcatenation.dir/arm_concatenation_s8_y.c.obj CMakeFiles/CMSISNNConcatenation.dir/arm_concatenation_s8_z.c.obj
-/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ranlib libCMSISNNConcatenation.a

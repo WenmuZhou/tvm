@@ -1,2 +1,0 @@
-/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ar qc libCMSISNNFullyConnected.a CMakeFiles/CMSISNNFullyConnected.dir/arm_fully_connected_s8.c.obj
-/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ranlib libCMSISNNFullyConnected.a

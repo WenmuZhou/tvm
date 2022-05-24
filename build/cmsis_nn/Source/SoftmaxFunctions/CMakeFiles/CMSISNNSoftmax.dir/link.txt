@@ -1,2 +1,0 @@
-/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ar qc libCMSISNNSoftmax.a CMakeFiles/CMSISNNSoftmax.dir/arm_softmax_s8.c.obj
-/opt/arm/gcc-arm-none-eabi/bin/arm-none-eabi-ranlib libCMSISNNSoftmax.a
